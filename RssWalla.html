@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html>
+<link rel="stylesheet" href="http://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css">
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/1.12.4/jquery.min.js"></script>
+<script src="http://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js"></script>
+<script src="http://ajax.googleapis.com/ajax/libs/angularjs/1.4.8/angular.min.js"></script>
+<script src="http://ajax.googleapis.com/ajax/libs/angularjs/1.4.8/angular-sanitize.js"></script>
+<script src="http://ajax.googleapis.com/ajax/libs/angularjs/1.4.8/angular-route.js"></script>
+
+<style>
+	img {
+		height:75px;
+	}
+	.entry {
+	    margin: 20px;
+	    padding: 20px;
+	    border: 2px solid;
+	}
+	.urlBtn {
+		display: list-item;
+    	margin: 10px;
+	}
+
+	.navDiv {
+    	padding: 20px;
+   		padding-top: 40px;
+	}
+	.searchAddURL{
+		width: 305px;
+	}
+	.active {
+		background-color: #0033cc !important;
+		border-color: #0033cc !important;
+	}
+</style>
+<body>
+<div class="container" ng-app="myApp" ng-controller="myCtrl">
+	<div class="row">
+		<div class="col-md-4 navDiv">
+			<input type="text" name="urlForRSS" ng-model="urlForGet" class="searchAddURL">
+			<button type="button" class="btn btn-default btn-sm" ng-click="getFeed()">
+          		<span class="glyphicon glyphicon-search"></span> 
+        	</button>
+
+			</br>
+			<hr>
+<!-- 			<a href="#"> --> 
+				<div class="btn btn-info urlBtn" ng-repeat="url in urlArr" ng-click='setActive(url)' ng-class='checkActiveClass(url)'>
+					<span>{{url.link}} </span>
+					<span class="glyphicon glyphicon-remove pull-right" ng-click="removeURL(url)"></span>
+				</div>
+<!-- 			</a>	 -->		
+		</div>
+		<div class="col-md-8">
+			<h1> {{ activeURL.title }} </h1>
+			<entry ng-repeat="entry in activeURL.entries" entry-data='entry'></entry>
+		</div>		
+	</div>
+</div>
+
+
+
+<script>
+var app = angular.module("myApp", ["ngRoute", "ngSanitize"]);
+
+app.directive("entry", function() {
+    return {
+        restrict : 'E',
+        scope: {
+        	entryData: '=entryData',
+        },
+        template: "<div class='entry'><h4> {{entryData.title}} </h4> <p>- {{entryData.publishedDate}} </p> <div ng-bind-html='entryData.content'> </div></div>"
+    };
+});
+
+
+app.controller('myCtrl', function($scope, $http, $location, $window, $timeout, $log) {
+
+	///////////////////
+	/// Global Vars ///
+	///////////////////
+
+	$scope.urlForGet='';
+	$scope.urlArr= [];
+	$scope.historyURL= [];
+
+	//////////////////////
+	/// ADD/Remove URL ///
+	//////////////////////
+
+	$scope.getFeed = function () {
+
+		var url ='http://ajax.googleapis.com/ajax/services/feed/load?v=1.0&num=50&callback=JSON_CALLBACK&q=' + $scope.urlForGet;
+
+		$http.jsonp(url).
+	 	   success(function(data, status, headers, config) {
+		        insertURL(data.responseData.feed);
+		    }).
+		   error(function(data, status, headers, config) {
+	    	    $scope.error = true;
+		    });
+	}
+
+
+  	function insertURL(URL){
+
+  		$scope.setActive(URL);
+
+  		for (var i = 0; i < $scope.urlArr.length; i++) {
+  			if ($scope.urlArr[i].title == URL.title) {
+  				if (URL == $scope.urlArr[i]) {
+  					alert("URL Existes");
+  				}
+  				else {
+  					$scope.urlArr[i] = URL;
+  					alert("Updated URL");  										
+  					return;
+  				}
+  			};
+  		}
+  		$scope.urlArr.push(URL);
+  		updateLocalStorage();
+  	}
+
+  	$scope.setActive = function(URL) {
+  		if ((URL != undefined) && (URL != $scope.activeURL)) {
+	  		$scope.activeURL = URL;
+	  		$scope.historyURL.push(URL);
+	  	}
+  	}
+
+  	$scope.removeURL = function(URL) {
+
+  		if (URL == $scope.activeURL) {
+  			$scope.activeURL = [];
+  		}
+		var index = $scope.urlArr.indexOf(URL);
+		$scope.urlArr.splice(index, 1);
+  		updateLocalStorage();		    
+	}
+
+	/////////////////////
+	/// Allow refresh ///
+	/////////////////////
+
+	function updateLocalStorage() {
+
+		var urlLocalStorageList=[];
+
+		for (var i = 0; i < $scope.urlArr.length; i++) {
+			urlLocalStorageList.push($scope.urlArr[i].feedUrl);
+		};
+
+		localStorage.setItem("urlListForRefresh",  JSON.stringify(urlLocalStorageList));
+	}
+
+	function getFromLocalStorage() {
+		
+		var urlLocalStorageString = localStorage.getItem("urlListForRefresh");
+		var urlLocalStorageList	= [];	
+
+		if ((urlLocalStorageString != null) && (urlLocalStorageString != "") && (urlLocalStorageString != undefined)) {
+			urlLocalStorageList = JSON.parse(urlLocalStorageString);
+			for (var i = 0; i < urlLocalStorageList.length; i++) {
+				$scope.urlForGet = urlLocalStorageList[i];
+				$scope.getFeed();
+			};
+		};
+
+	}
+	getFromLocalStorage();
+
+	//////////////////
+	/// UI methods ///
+	//////////////////
+
+	$scope.checkActiveClass = function(url){
+		if (url == $scope.activeURL) {
+			return "active";
+		};
+	}
+
+    $timeout(function () {
+    	var loacation = $window.location.href + "#"; // Enabling browser back button
+        location.replace(loacation);
+    }, 2000);
+
+    $window.onhashchange = function(e) {
+    	if (e.newURL == window.location.href) {
+    		e.preventDefault();
+    		if ($scope.urlArr.indexOf($scope.historyURL[$scope.historyURL.length-2]) != -1) {
+	  			$scope.activeURL = $scope.historyURL[$scope.historyURL.length-2];
+				$scope.$apply();    			
+    		}
+    		else{
+    			$log.info("Can't get this feed from history")    			
+    		}
+			$scope.historyURL.pop();
+    	};
+    }    
+
+});
+
+</script>
+
+</body>
+</html>
